@@ -22,7 +22,7 @@ import studies.movie_pulse_app.sensor.event.ValueReadingsEvent;
 public class MockSensor extends Sensor {
     private final Observable<SensorEvent> events;
 
-    public MockSensor(boolean simulateError) {
+    public MockSensor(boolean simulateError, int readingInterval) {
         // Funny hack to make timeInStart created at the point of subscription
         // (instead of only once when declaring MockSensor class)
         Observable<Long> timeInStartGenerator = Observable.just(null).map(n -> System.currentTimeMillis());
@@ -36,13 +36,13 @@ public class MockSensor extends Sensor {
                     long counterValue = val[0];
                     long timeInStart = val[1];
                     // Convert counter back to matching ellapsed time
-                    long currentTime = timeInStart + counterValue * 50;
+                    long currentTime = timeInStart + counterValue * 50 + (int)(Math.random() * 30) - 15;
                     short pulse = (short)(120 + Math.sin(counterValue / 3.0) * 120);
 
                     return new ValueReading(currentTime, pulse);
                 })
                 .onBackpressureDrop()
-                .buffer(100, TimeUnit.MILLISECONDS)
+                .buffer(readingInterval, TimeUnit.MILLISECONDS)
                 // Quickfix to the bug caused by error situation simulation (.takeUntil causes backpressure)
                 .map(ValueReadingsEvent::new);
 

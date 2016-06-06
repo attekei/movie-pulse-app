@@ -47,7 +47,7 @@ public class MoviePlayer extends AppCompatActivity {
 
         configurePulseChart();
 
-        Observable<SensorEvent> sensorEvents = new MockSensor(true).getEvents()
+        Observable<SensorEvent> sensorEvents = new MockSensor(true, 110).getEvents()
                 .observeOn(AndroidSchedulers.mainThread());
 
         sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(e -> this.showSearchingDevice());
@@ -61,7 +61,7 @@ public class MoviePlayer extends AppCompatActivity {
     private void configurePulseChart() {
         // The sensor library is not very good (doesn't support float values for the x axis),
         // but currently use it for the sake of prototyping
-        pulseHistorySeries = new SimpleXYSeries("Azimuth");
+        pulseHistorySeries = new SimpleXYSeries("Pulse reading");
         pulseChart.setRangeBoundaries(0, 255, BoundaryMode.FIXED);
         pulseChart.setDomainBoundaries(0, 10000, BoundaryMode.FIXED);
         pulseChart.addSeries(pulseHistorySeries, new LineAndPointFormatter(Color.rgb(100, 100, 200), Color.BLACK, Color.BLACK, null));
