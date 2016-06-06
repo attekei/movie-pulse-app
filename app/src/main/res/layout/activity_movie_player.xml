@@ -13,9 +13,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Connecting to the sensor..." />
-    <com.github.mikephil.charting.charts.LineChart
+    <com.androidplot.xy.XYPlot
         android:id="@+id/pulse_chart"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        title="A/P/R History"
+        android:layout_marginTop="15pt" />
 
 </RelativeLayout>

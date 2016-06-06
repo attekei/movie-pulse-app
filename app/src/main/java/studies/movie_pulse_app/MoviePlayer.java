@@ -5,16 +5,13 @@ import android.renderscript.Sampler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.TextView;
 
-import com.github.mikephil.charting.charts.LineChart;
-import com.github.mikephil.charting.components.XAxis;
-import com.github.mikephil.charting.components.YAxis;
-import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.data.LineData;
-import com.github.mikephil.charting.data.LineDataSet;
-import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
-import com.github.mikephil.charting.utils.ColorTemplate;
+import com.androidplot.xy.BoundaryMode;
+import com.androidplot.xy.LineAndPointFormatter;
+import com.androidplot.xy.SimpleXYSeries;
+import com.androidplot.xy.XYPlot;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,9 +31,11 @@ import studies.movie_pulse_app.sensor.event.ValueReadingsEvent;
 
 public class MoviePlayer extends AppCompatActivity {
 
-    @BindView(R.id.pulse_chart) LineChart pulseChart;
+    @BindView(R.id.pulse_chart) XYPlot pulseChart;
     @BindView(R.id.status_text) TextView statusText;
-    private long initialTime;
+    private Long initialTime = null;
+    private SimpleXYSeries pulseHistorySeries;
+    private static final int HISTORY_SIZE = 300;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,11 +45,9 @@ public class MoviePlayer extends AppCompatActivity {
         setContentView(R.layout.activity_movie_player);
         ButterKnife.bind(this);
 
-
-        initialTime = System.currentTimeMillis();
         configurePulseChart();
 
-        Observable<SensorEvent> sensorEvents = new MockSensor().getEvents()
+        Observable<SensorEvent> sensorEvents = new MockSensor(true).getEvents()
                 .observeOn(AndroidSchedulers.mainThread());
 
         sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(e -> this.showSearchingDevice());
@@ -64,25 +61,11 @@ public class MoviePlayer extends AppCompatActivity {
     private void configurePulseChart() {
         // The sensor library is not very good (doesn't support float values for the x axis),
         // but currently use it for the sake of prototyping
-
-        LineData data = new LineData();
-        pulseChart.setData(data);
-
-        XAxis xl = pulseChart.getXAxis();
-        //xl.setTypeface(tf);
-        xl.setTextColor(Color.WHITE);
-        xl.setDrawGridLines(false);
-        xl.setAvoidFirstLastClipping(true);
-        xl.setSpaceBetweenLabels(5);
-        xl.setEnabled(true);
-
-        YAxis leftAxis = pulseChart.getAxisLeft();
-        //leftAxis.setTypeface(tf);
-        leftAxis.setTextColor(Color.WHITE);
-        leftAxis.setAxisMaxValue(255f);
-        leftAxis.setAxisMinValue(0f);
-        leftAxis.setDrawGridLines(true);
-
+        pulseHistorySeries = new SimpleXYSeries("Azimuth");
+        pulseChart.setRangeBoundaries(0, 255, BoundaryMode.FIXED);
+        pulseChart.setDomainBoundaries(0, 10000, BoundaryMode.FIXED);
+        pulseChart.addSeries(pulseHistorySeries, new LineAndPointFormatter(Color.rgb(100, 100, 200), Color.BLACK, Color.BLACK, null));
+        //pulseChart.setLayerType(View.LAYER_TYPE_NONE, null);
     }
 
     @Override
@@ -93,54 +76,18 @@ public class MoviePlayer extends AppCompatActivity {
     private void addReadingToGraph(ValueReadingsEvent e) {
         statusText.setText("Fetched " + e.valueReadings.size() + " readings.");
         for (ValueReading reading : e.valueReadings) {
-            LineData data = pulseChart.getData();
-
-            if (data != null) {
-
-                ILineDataSet set = data.getDataSetByIndex(0);
-                // set.addEntry(...); // can be called as well
-
-                if (set == null) {
-                    set = createSet();
-                    data.addDataSet(set);
-                }
-
-                // NOTE: Currently this doesn't take account the "breaks" caused e.g. by a
-                // lost connection. Maybe custom plotting should be used instead, which
-                // could also lead to much better performance.
-
-                data.addXValue(data.getXValCount() / 20.0 + "");
-                data.addEntry(new Entry((float)reading.value, set.getEntryCount()), 0);
-
-                // let the chart know it's data has changed
-                pulseChart.notifyDataSetChanged();
-
-                // limit the number of visible entries
-                pulseChart.setVisibleXRangeMaximum(105);
-
-                // move to the latest entry
-                pulseChart.moveViewToX(Math.max(data.getXValCount() - 105, 0));
-
-                // this automatically refreshes the chart (calls invalidate())
-                // mChart.moveViewTo(data.getXValCount()-7, 55f,
-                // AxisDependency.LEFT);
+            Log.i("LULZ", "Current time: " + (reading.time - initialTime));
+            if (pulseHistorySeries.size() > HISTORY_SIZE) {
+                pulseHistorySeries.removeFirst();
             }
+
+            long timeSinceBeginning = reading.time - initialTime;
+            pulseHistorySeries.addLast(timeSinceBeginning, reading.value);
+
+            pulseChart.redraw();
+
+            pulseChart.setDomainBoundaries(Math.max(0, timeSinceBeginning - 5000), timeSinceBeginning, BoundaryMode.FIXED);
         }
-    }
-    private LineDataSet createSet() {
-        LineDataSet set = new LineDataSet(null, "Dynamic Data");
-        set.setAxisDependency(YAxis.AxisDependency.LEFT);
-        set.setColor(ColorTemplate.getHoloBlue());
-        set.setCircleColor(Color.WHITE);
-        set.setLineWidth(2f);
-        set.setCircleRadius(4f);
-        set.setFillAlpha(65);
-        set.setFillColor(ColorTemplate.getHoloBlue());
-        set.setHighLightColor(Color.rgb(244, 117, 117));
-        set.setValueTextColor(Color.WHITE);
-        set.setValueTextSize(9f);
-        set.setDrawValues(false);
-        return set;
     }
 
     private void showSearchingDevice() {
@@ -151,6 +98,9 @@ public class MoviePlayer extends AppCompatActivity {
 
     private void startMovie() {
         statusText.setText("Connection established!");
+        if (initialTime == null) {
+            initialTime = System.currentTimeMillis();
+        }
     }
 
     private void pauseMovieAndInformOfError() {

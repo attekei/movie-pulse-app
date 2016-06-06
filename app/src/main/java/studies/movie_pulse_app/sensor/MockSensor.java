@@ -22,7 +22,7 @@ import studies.movie_pulse_app.sensor.event.ValueReadingsEvent;
 public class MockSensor extends Sensor {
     private final Observable<SensorEvent> events;
 
-    public MockSensor() {
+    public MockSensor(boolean simulateError) {
         // Funny hack to make timeInStart created at the point of subscription
         // (instead of only once when declaring MockSensor class)
         Observable<Long> timeInStartGenerator = Observable.just(null).map(n -> System.currentTimeMillis());
@@ -42,7 +42,7 @@ public class MockSensor extends Sensor {
                     return new ValueReading(currentTime, pulse);
                 })
                 .onBackpressureDrop()
-                .buffer(1000, TimeUnit.MILLISECONDS)
+                .buffer(100, TimeUnit.MILLISECONDS)
                 // Quickfix to the bug caused by error situation simulation (.takeUntil causes backpressure)
                 .map(ValueReadingsEvent::new);
 
@@ -53,18 +53,22 @@ public class MockSensor extends Sensor {
                 Observable.timer(6, TimeUnit.SECONDS).flatMap(n -> sensorReadings)
         );
 
-        // After 30 seconds, simulate losing of the connection & connection recovery
-        Observable<SensorEvent> simulateErrorEvents = Observable.timer(30, TimeUnit.SECONDS).flatMap(
-                e -> Observable.merge(
-                        Observable.just(new ConnLostEvent()),
-                        Observable.timer(10, TimeUnit.SECONDS).map(n -> new ConnEstablishedEvent()),
-                        Observable.timer(11, TimeUnit.SECONDS).flatMap(n -> sensorReadings)
-                )
-        );
+        if (simulateError) {
+            // After 30 seconds, simulate losing of the connection & connection recovery
+            Observable<SensorEvent> simulateErrorEvents = Observable.timer(30, TimeUnit.SECONDS).flatMap(
+                    e -> Observable.merge(
+                            Observable.just(new ConnLostEvent()),
+                            Observable.timer(10, TimeUnit.SECONDS).map(n -> new ConnEstablishedEvent()),
+                            Observable.timer(11, TimeUnit.SECONDS).flatMap(n -> sensorReadings)
+                    )
+            );
 
-        events = initialEvents.takeUntil(simulateErrorEvents)
-                .mergeWith(simulateErrorEvents)
-                .share();
+            events = initialEvents.takeUntil(simulateErrorEvents)
+                    .mergeWith(simulateErrorEvents)
+                    .share();
+        } else {
+            events = initialEvents;
+        }
     }
 
     public Observable<SensorEvent> getEvents() {
