@@ -6,8 +6,8 @@ android {
     buildToolsVersion "23.0.2"
 
     defaultConfig {
-        applicationId "studies.sensorapp"
-        minSdkVersion 15
+        applicationId "studies.moviepulseapp"
+        minSdkVersion 18
         targetSdkVersion 23
         versionCode 1
         versionName "1.0"
@@ -38,6 +38,9 @@ dependencies {
     apt 'com.jakewharton:butterknife-compiler:8.0.1'
     compile 'com.github.PhilJay:MPAndroidChart:v2.2.5'
     compile "com.androidplot:androidplot-core:0.9.8"
+    compile 'com.tbruyelle.rxpermissions:rxpermissions:0.7.0@aar'
+    compile "com.polidea.rxandroidble:rxandroidble:1.0.1"
+
 }
 
 buildscript {
