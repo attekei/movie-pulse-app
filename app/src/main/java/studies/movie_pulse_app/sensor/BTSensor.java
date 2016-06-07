@@ -15,10 +15,10 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import rx.Observable;
-import studies.movie_pulse_app.sensor.bluetooth.RBLService;
 import studies.movie_pulse_app.sensor.event.BluetoothFailureEvent;
 import studies.movie_pulse_app.sensor.event.ConnEstablishedEvent;
 import studies.movie_pulse_app.sensor.event.ConnLostEvent;
@@ -29,9 +29,8 @@ import studies.movie_pulse_app.sensor.event.ValueReadingsEvent;
 public class BTSensor extends Sensor {
     private final Observable<SensorEvent> events;
     private final RxBleClient rxBleClient;
-    private BluetoothAdapter mBluetoothAdapter;
-    public static BluetoothDevice activeDevice = null;
-    private static final long SCAN_PERIOD = 5000;
+    public final static UUID UUID_BLE_SHIELD_RX =
+            UUID.fromString("713d0002-503e-4c75-ba94-3148f18d941e");
     private Context ctx;
 
     public BTSensor(Context ctx) {
@@ -72,7 +71,7 @@ public class BTSensor extends Sensor {
         Observable<Long> timeInStartGenerator = connectionStream.map(n -> System.currentTimeMillis());
 
         Observable<byte[]> rawReadingsStream = connectionStream
-                .flatMap(rxBleConnection -> rxBleConnection.setupNotification(RBLService.UUID_BLE_SHIELD_RX))
+                .flatMap(rxBleConnection -> rxBleConnection.setupNotification(UUID_BLE_SHIELD_RX))
                 .doOnNext(r -> Log.i("BTSensor", "Listening to notifications is set up"))
                 .flatMap(notificationObservable -> notificationObservable);
 
