@@ -3,6 +3,7 @@ package studies.movie_pulse_app;
 import android.Manifest;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.renderscript.Sampler;
@@ -28,6 +29,9 @@ import rx.Observable;
 import rx.Subscriber;
 import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Action0;
+import rx.functions.Action1;
+import rx.functions.Func1;
 import rx.observables.ConnectableObservable;
 import rx.subscriptions.Subscriptions;
 import studies.movie_pulse_app.sensor.BTSensor;
@@ -64,8 +68,18 @@ public class MoviePlayer extends AppCompatActivity {
 
 
         ConnectableObservable<SensorEvent> sensorEvents = requestLocationPerm()
-                .flatMap(p -> askUserWhetherToUseRealSensor())
-                .flatMap(u -> u ? new BTSensor(this).getEvents() : new MockSensor(false).getEvents() )
+                .flatMap(new Func1<Boolean, Observable<? extends Boolean>>() {
+                    @Override
+                    public Observable<? extends Boolean> call(Boolean p) {
+                        return MoviePlayer.this.askUserWhetherToUseRealSensor();
+                    }
+                })
+                .flatMap(new Func1<Boolean, Observable<? extends SensorEvent>>() {
+                    @Override
+                    public Observable<? extends SensorEvent> call(Boolean u) {
+                        return u ? new BTSensor(MoviePlayer.this).getEvents() : new MockSensor(false).getEvents();
+                    }
+                })
                 .observeOn(AndroidSchedulers.mainThread())
                 .publish();
 
@@ -73,29 +87,68 @@ public class MoviePlayer extends AppCompatActivity {
         // (unsubscribing is done in onDestroy)
         sensorEventsSubscription = sensorEvents.connect();
 
-        sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(e -> this.showSearchingDevice());
-        sensorEvents.ofType(ConnEstablishedEvent.class).subscribe(e -> this.startMovie());
-        sensorEvents.ofType(ConnLostEvent.class).subscribe(e -> this.pauseMovieAndInformOfError());
-        sensorEvents.ofType(BluetoothFailureEvent.class).subscribe(e -> this.informOfBluetoothFailure());
-        sensorEvents.ofType(ValueReadingsEvent.class).subscribe(this::addReadingToGraph);
+        sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(new Action1<SearchingDeviceEvent>() {
+            @Override
+            public void call(SearchingDeviceEvent e) {
+                MoviePlayer.this.showSearchingDevice();
+            }
+        });
+        sensorEvents.ofType(ConnEstablishedEvent.class).subscribe(new Action1<ConnEstablishedEvent>() {
+            @Override
+            public void call(ConnEstablishedEvent e) {
+                MoviePlayer.this.startMovie();
+            }
+        });
+        sensorEvents.ofType(ConnLostEvent.class).subscribe(new Action1<ConnLostEvent>() {
+            @Override
+            public void call(ConnLostEvent e) {
+                MoviePlayer.this.pauseMovieAndInformOfError();
+            }
+        });
+        sensorEvents.ofType(BluetoothFailureEvent.class).subscribe(new Action1<BluetoothFailureEvent>() {
+            @Override
+            public void call(BluetoothFailureEvent e) {
+                MoviePlayer.this.informOfBluetoothFailure();
+            }
+        });
+        sensorEvents.ofType(ValueReadingsEvent.class).subscribe(new Action1<ValueReadingsEvent>() {
+            @Override
+            public void call(ValueReadingsEvent e) {
+                MoviePlayer.this.addReadingToGraph(e);
+            }
+        });
     }
 
     Observable<Boolean> askUserWhetherToUseRealSensor() {
-        return Observable.create((Subscriber<? super Boolean> subscriber) -> {
-            final AlertDialog ad = new AlertDialog.Builder(this)
-                    .setTitle("Which sensor implementation do you want to use?")
-                    .setPositiveButton("BlueTooth", (dialog, which) -> {
-                        subscriber.onNext(true);
-                        subscriber.onCompleted();
-                    })
-                    .setNegativeButton("Mock", (dialog, which) -> {
-                        subscriber.onNext(false);
-                        subscriber.onCompleted();
-                    })
-                    .create();
+        return Observable.create(new Observable.OnSubscribe<Boolean>() {
+            @Override
+            public void call(final Subscriber<? super Boolean> subscriber) {
+                final AlertDialog ad = new AlertDialog.Builder(MoviePlayer.this)
+                        .setTitle("Which sensor implementation do you want to use?")
+                        .setPositiveButton("BlueTooth", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                subscriber.onNext(true);
+                                subscriber.onCompleted();
+                            }
+                        })
+                        .setNegativeButton("Mock", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                subscriber.onNext(false);
+                                subscriber.onCompleted();
+                            }
+                        })
+                        .create();
 
-            subscriber.add(Subscriptions.create(ad::dismiss));
-            ad.show();
+                subscriber.add(Subscriptions.create(new Action0() {
+                    @Override
+                    public void call() {
+                        ad.dismiss();
+                    }
+                }));
+                ad.show();
+            }
         });
     }
 
