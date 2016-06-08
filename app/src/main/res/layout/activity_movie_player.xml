@@ -18,6 +18,16 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         title="A/P/R History"
-        android:layout_marginTop="15pt" />
+        android:layout_below="@+id/status_text"
+        android:layout_alignParentStart="true"
+        android:layout_marginBottom="40dp" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Finish Recording"
+        android:id="@+id/finish_button"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true" />
 
 </RelativeLayout>

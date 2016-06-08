@@ -2,14 +2,17 @@ package studies.movie_pulse_app;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.os.Environment;
+import android.support.v4.app.DialogFragment;
 import android.bluetooth.BluetoothAdapter;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.renderscript.Sampler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,8 +22,10 @@ import com.androidplot.xy.SimpleXYSeries;
 import com.androidplot.xy.XYPlot;
 import com.tbruyelle.rxpermissions.RxPermissions;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.util.LinkedList;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -28,11 +33,13 @@ import rx.Observable;
 import rx.Subscriber;
 import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Action0;
+import rx.functions.Action1;
+import rx.functions.Func1;
 import rx.observables.ConnectableObservable;
 import rx.subscriptions.Subscriptions;
 import studies.movie_pulse_app.sensor.BTSensor;
 import studies.movie_pulse_app.sensor.MockSensor;
-import studies.movie_pulse_app.sensor.Sensor;
 import studies.movie_pulse_app.sensor.event.BluetoothFailureEvent;
 import studies.movie_pulse_app.sensor.event.ConnEstablishedEvent;
 import studies.movie_pulse_app.sensor.event.ConnLostEvent;
@@ -41,7 +48,7 @@ import studies.movie_pulse_app.sensor.event.SensorEvent;
 import studies.movie_pulse_app.sensor.event.ValueReading;
 import studies.movie_pulse_app.sensor.event.ValueReadingsEvent;
 
-public class MoviePlayer extends AppCompatActivity {
+public class MoviePlayer extends AppCompatActivity implements StartDialogFragment.NoticeDialogListener {
 
     @BindView(R.id.pulse_chart) XYPlot pulseChart;
     @BindView(R.id.status_text) TextView statusText;
@@ -49,6 +56,9 @@ public class MoviePlayer extends AppCompatActivity {
     private SimpleXYSeries pulseHistorySeries;
     private static final int HISTORY_SIZE = 300;
     private Subscription sensorEventsSubscription;
+    private LinkedList<SensorDataInstance> dataValues = new LinkedList<>();
+    private boolean moviePlaying = false;
+    private final String dataFileName = "HeartReadings.txt";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,10 +72,27 @@ public class MoviePlayer extends AppCompatActivity {
 
         Log.i("MoviePlayer","Starting to initialize sensor connection");
 
+        Button finishButton = (Button) findViewById(R.id.finish_button);
+        finishButton.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                finishRecording();
+            }
+        });
+
 
         ConnectableObservable<SensorEvent> sensorEvents = requestLocationPerm()
-                .flatMap(p -> askUserWhetherToUseRealSensor())
-                .flatMap(u -> u ? new BTSensor(this).getEvents() : new MockSensor(false).getEvents() )
+                .flatMap(new Func1<Boolean, Observable<? extends Boolean>>() {
+                    @Override
+                    public Observable<? extends Boolean> call(Boolean p) {
+                        return MoviePlayer.this.askUserWhetherToUseRealSensor();
+                    }
+                })
+                .flatMap(new Func1<Boolean, Observable<? extends SensorEvent>>() {
+                    @Override
+                    public Observable<? extends SensorEvent> call(Boolean u) {
+                        return u ? new BTSensor(MoviePlayer.this).getEvents() : new MockSensor(false).getEvents();
+                    }
+                })
                 .observeOn(AndroidSchedulers.mainThread())
                 .publish();
 
@@ -73,29 +100,68 @@ public class MoviePlayer extends AppCompatActivity {
         // (unsubscribing is done in onDestroy)
         sensorEventsSubscription = sensorEvents.connect();
 
-        sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(e -> this.showSearchingDevice());
-        sensorEvents.ofType(ConnEstablishedEvent.class).subscribe(e -> this.startMovie());
-        sensorEvents.ofType(ConnLostEvent.class).subscribe(e -> this.pauseMovieAndInformOfError());
-        sensorEvents.ofType(BluetoothFailureEvent.class).subscribe(e -> this.informOfBluetoothFailure());
-        sensorEvents.ofType(ValueReadingsEvent.class).subscribe(this::addReadingToGraph);
+        sensorEvents.ofType(SearchingDeviceEvent.class).subscribe(new Action1<SearchingDeviceEvent>() {
+            @Override
+            public void call(SearchingDeviceEvent e) {
+                MoviePlayer.this.showSearchingDevice();
+            }
+        });
+        sensorEvents.ofType(ConnEstablishedEvent.class).subscribe(new Action1<ConnEstablishedEvent>() {
+            @Override
+            public void call(ConnEstablishedEvent e) {
+                MoviePlayer.this.readyToStartMovie();
+            }
+        });
+        sensorEvents.ofType(ConnLostEvent.class).subscribe(new Action1<ConnLostEvent>() {
+            @Override
+            public void call(ConnLostEvent e) {
+                MoviePlayer.this.pauseMovieAndInformOfError();
+            }
+        });
+        sensorEvents.ofType(BluetoothFailureEvent.class).subscribe(new Action1<BluetoothFailureEvent>() {
+            @Override
+            public void call(BluetoothFailureEvent e) {
+                MoviePlayer.this.informOfBluetoothFailure();
+            }
+        });
+        sensorEvents.ofType(ValueReadingsEvent.class).subscribe(new Action1<ValueReadingsEvent>() {
+            @Override
+            public void call(ValueReadingsEvent e) {
+                MoviePlayer.this.addReadingToGraph(e);
+            }
+        });
     }
 
     Observable<Boolean> askUserWhetherToUseRealSensor() {
-        return Observable.create((Subscriber<? super Boolean> subscriber) -> {
-            final AlertDialog ad = new AlertDialog.Builder(this)
-                    .setTitle("Which sensor implementation do you want to use?")
-                    .setPositiveButton("BlueTooth", (dialog, which) -> {
-                        subscriber.onNext(true);
-                        subscriber.onCompleted();
-                    })
-                    .setNegativeButton("Mock", (dialog, which) -> {
-                        subscriber.onNext(false);
-                        subscriber.onCompleted();
-                    })
-                    .create();
+        return Observable.create(new Observable.OnSubscribe<Boolean>() {
+            @Override
+            public void call(final Subscriber<? super Boolean> subscriber) {
+                final AlertDialog ad = new AlertDialog.Builder(MoviePlayer.this)
+                        .setTitle("Which sensor implementation do you want to use?")
+                        .setPositiveButton("BlueTooth", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                subscriber.onNext(true);
+                                subscriber.onCompleted();
+                            }
+                        })
+                        .setNegativeButton("Mock", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                subscriber.onNext(false);
+                                subscriber.onCompleted();
+                            }
+                        })
+                        .create();
 
-            subscriber.add(Subscriptions.create(ad::dismiss));
-            ad.show();
+                subscriber.add(Subscriptions.create(new Action0() {
+                    @Override
+                    public void call() {
+                        ad.dismiss();
+                    }
+                }));
+                ad.show();
+            }
         });
     }
 
@@ -140,6 +206,7 @@ public class MoviePlayer extends AppCompatActivity {
 
             pulseChart.setDomainBoundaries(Math.max(0, timeSinceBeginning - 5000), timeSinceBeginning, BoundaryMode.FIXED);
             pulseChart.redraw();
+            if (moviePlaying) dataValues.addLast(new SensorDataInstance(timeSinceBeginning,reading.value));
         }
     }
 
@@ -150,11 +217,35 @@ public class MoviePlayer extends AppCompatActivity {
 
     }
 
-    private void startMovie() {
+    private void readyToStartMovie() {
         statusText.setText("Connection established!");
-        if (initialTime == null) {
-            initialTime = System.currentTimeMillis();
+        showStartMovieDialog();
+    }
+
+    private void writeReadingsToFile() {
+        FileOutputStream outputStream;
+
+        File file = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS), dataFileName);
+
+        try {
+            outputStream = new FileOutputStream(file);
+            PrintWriter pw = new PrintWriter(outputStream);
+
+            for (SensorDataInstance s : dataValues) {
+                String reading = "(" + s.getTime() + "," + s.getValue() + ")";
+                pw.println(reading);
+            }
+            outputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+    }
+
+    private void finishRecording() {
+        writeReadingsToFile();
+        Toast.makeText(this, "Wrote sensor data to file " +dataFileName, Toast.LENGTH_SHORT).show();
+        finish();
     }
 
     private void pauseMovieAndInformOfError() {
@@ -163,6 +254,25 @@ public class MoviePlayer extends AppCompatActivity {
 
     private void informOfBluetoothFailure() {
         statusText.setText("Bluetooth system failure, try restarting the app.");
+    }
+
+    private void showStartMovieDialog() {
+        DialogFragment dialog = new StartDialogFragment();
+        dialog.show(getSupportFragmentManager(), "NoticeDialogFragment");
+    }
+
+    @Override
+    public void onDialogPositiveClick(DialogFragment dialog) {
+
+        if (initialTime == null) {
+            initialTime = System.currentTimeMillis();
+        }
+        moviePlaying = true;
+    }
+
+    @Override
+    public void onDialogNegativeClick(DialogFragment dialog) {
+        finish();
     }
 
 }
