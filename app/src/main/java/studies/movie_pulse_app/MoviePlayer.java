@@ -269,7 +269,6 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
     @Override
     public void onDialogPositiveClick(DialogFragment dialog) {
-
         if (movieStartTime == null) {
             movieStartTime = System.currentTimeMillis();
         }
