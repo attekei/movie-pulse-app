@@ -206,9 +206,21 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
             pulseHistorySeries.addLast(timeSinceBeginning, reading.value & 0xFF);
 
             pulseChart.setDomainBoundaries(Math.max(0, timeSinceBeginning - 5000), timeSinceBeginning, BoundaryMode.FIXED);
+            pulseChart.setRangeBoundaries(getMinimumValueOfXYSeries(pulseHistorySeries, 100), 255, BoundaryMode.FIXED);
             pulseChart.redraw();
             if (moviePlaying) dataValues.addLast(new SensorDataInstance(reading.time-movieStartTime,reading.value));
         }
+    }
+
+    private Number getMinimumValueOfXYSeries(SimpleXYSeries series, int valueCountLimiter) {
+        int minimum = 100000;
+        for (int i = Math.max(0, series.size() - 1 - valueCountLimiter); i < series.size(); i++) {
+            if (series.getY(i).intValue() < minimum) {
+                minimum = series.getY(i).intValue();
+            }
+        }
+
+        return minimum;
     }
 
     private void showSearchingDevice() {
