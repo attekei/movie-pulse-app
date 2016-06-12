@@ -2,7 +2,10 @@ package studies.movie_pulse_app;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.Context;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.support.v4.app.DialogFragment;
 import android.bluetooth.BluetoothAdapter;
 import android.content.DialogInterface;
@@ -12,7 +15,9 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.Window;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -60,6 +65,7 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
     private LinkedList<SensorDataInstance> dataValues = new LinkedList<>();
     private boolean moviePlaying = false;
     private final String dataFileName = "HeartReadings_";
+    private PowerManager.WakeLock wl;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -206,9 +212,21 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
             pulseHistorySeries.addLast(timeSinceBeginning, reading.value & 0xFF);
 
             pulseChart.setDomainBoundaries(Math.max(0, timeSinceBeginning - 5000), timeSinceBeginning, BoundaryMode.FIXED);
+            pulseChart.setRangeBoundaries(getMinimumValueOfXYSeries(pulseHistorySeries, 100), 255, BoundaryMode.FIXED);
             pulseChart.redraw();
             if (moviePlaying) dataValues.addLast(new SensorDataInstance(reading.time-movieStartTime,reading.value));
         }
+    }
+
+    private Number getMinimumValueOfXYSeries(SimpleXYSeries series, int valueCountLimiter) {
+        int minimum = 100000;
+        for (int i = Math.max(0, series.size() - 1 - valueCountLimiter); i < series.size(); i++) {
+            if (series.getY(i).intValue() < minimum) {
+                minimum = series.getY(i).intValue();
+            }
+        }
+
+        return minimum;
     }
 
     private void showSearchingDevice() {
@@ -250,9 +268,8 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
     private void finishRecording() {
         writeReadingsToFile();
-        DataAnalyzer analyzer = new DataAnalyzer(dataValues);
-        System.out.println(analyzer.wasExciting());
-        finish();
+        wl.release();
+        showResultDialog();
     }
 
     private void pauseMovieAndInformOfError() {
@@ -268,12 +285,32 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
         dialog.show(getSupportFragmentManager(), "NoticeDialogFragment");
     }
 
+    private void showResultDialog() {
+        DataAnalyzer analyzer = new DataAnalyzer(dataValues);
+        Dialog settingsDialog = new Dialog(this);
+        settingsDialog.getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        settingsDialog.setContentView(getLayoutInflater().inflate(R.layout.rating_popup
+                , null));
+        if (analyzer.wasExciting()) {
+            ((ImageView) settingsDialog.findViewById(R.id.result_image)).setImageResource(R.drawable.exciting);
+        }
+        settingsDialog.findViewById(R.id.endbutton).setOnClickListener(new Button.OnClickListener() {
+            public void onClick(View v) {
+                finish();
+            }
+        });
+        settingsDialog.show();
+    }
+
     @Override
     public void onDialogPositiveClick(DialogFragment dialog) {
         if (movieStartTime == null) {
             movieStartTime = System.currentTimeMillis();
         }
         moviePlaying = true;
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        wl = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "Stay on");
+        wl.acquire();
     }
 
     @Override

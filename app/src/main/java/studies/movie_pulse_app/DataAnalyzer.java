@@ -12,7 +12,7 @@ public class DataAnalyzer {
     private boolean wasExciting = false;
 
     // The amount of heartbeats looked at to calculate the average interval
-    private int averageCalcIterationLength = 30;
+    private int averageCalcIterationLength = 50;
     // The amount of consecutive heart beats with "exciting" levels reached in a row to evaluate as exciting
     private int highPulseHeartBeatsNeeded = 20;
     // The threshold at which an interval will be deemed as exciting, (If intrvl <= avg / threshold)
@@ -35,7 +35,7 @@ public class DataAnalyzer {
 
         for (SensorDataInstance s : data) {
             // If we are at a peak
-            if (s.getValue() < lastData && goingUp) {
+            if (s.getValue() < lastData && goingUp && s.getValue() > -40) {
                 heartbeats.addLast(s.getTime());
                 goingUp = false;
             } else if (s.getValue() >= lastData) {
