@@ -235,14 +235,13 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
                 Environment.DIRECTORY_DOWNLOADS), fileName);
 
         try {
-            outputStream = new FileOutputStream(file);
-            PrintWriter pw = new PrintWriter(outputStream);
+            PrintWriter pw = new PrintWriter(file);
 
             for (SensorDataInstance s : dataValues) {
                 String reading = "(" + s.getTime() + "," + s.getValue() + ")";
                 pw.println(reading);
             }
-            outputStream.close();
+            pw.close();
             Toast.makeText(this, "Wrote sensor data to file " + fileName, Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             e.printStackTrace();
@@ -251,6 +250,8 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
     private void finishRecording() {
         writeReadingsToFile();
+        DataAnalyzer analyzer = new DataAnalyzer(dataValues);
+        System.out.println(analyzer.wasExciting());
         finish();
     }
 
