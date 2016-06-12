@@ -53,12 +53,13 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
     @BindView(R.id.pulse_chart) XYPlot pulseChart;
     @BindView(R.id.status_text) TextView statusText;
     private Long initialTime = null;
+    private Long movieStartTime = null;
     private SimpleXYSeries pulseHistorySeries;
     private static final int HISTORY_SIZE = 300;
     private Subscription sensorEventsSubscription;
     private LinkedList<SensorDataInstance> dataValues = new LinkedList<>();
     private boolean moviePlaying = false;
-    private final String dataFileName = "HeartReadings.txt";
+    private final String dataFileName = "HeartReadings_";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -206,7 +207,7 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
             pulseChart.setDomainBoundaries(Math.max(0, timeSinceBeginning - 5000), timeSinceBeginning, BoundaryMode.FIXED);
             pulseChart.redraw();
-            if (moviePlaying) dataValues.addLast(new SensorDataInstance(timeSinceBeginning,reading.value));
+            if (moviePlaying) dataValues.addLast(new SensorDataInstance(reading.time-movieStartTime,reading.value));
         }
     }
 
@@ -219,14 +220,19 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
     private void readyToStartMovie() {
         statusText.setText("Connection established!");
+        if (initialTime == null) {
+            initialTime = System.currentTimeMillis();
+        }
         showStartMovieDialog();
     }
 
     private void writeReadingsToFile() {
         FileOutputStream outputStream;
 
+        String fileName = dataFileName + ((int)(Math.random() * 90000 + 10000)) + ".txt";
+
         File file = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_DOWNLOADS), dataFileName);
+                Environment.DIRECTORY_DOWNLOADS), fileName);
 
         try {
             outputStream = new FileOutputStream(file);
@@ -237,6 +243,7 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
                 pw.println(reading);
             }
             outputStream.close();
+            Toast.makeText(this, "Wrote sensor data to file " + fileName, Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -244,7 +251,6 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
 
     private void finishRecording() {
         writeReadingsToFile();
-        Toast.makeText(this, "Wrote sensor data to file " +dataFileName, Toast.LENGTH_SHORT).show();
         finish();
     }
 
@@ -264,8 +270,8 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
     @Override
     public void onDialogPositiveClick(DialogFragment dialog) {
 
-        if (initialTime == null) {
-            initialTime = System.currentTimeMillis();
+        if (movieStartTime == null) {
+            movieStartTime = System.currentTimeMillis();
         }
         moviePlaying = true;
     }
