@@ -68,8 +68,6 @@ public class DataAnalyzer {
 
         for (Long t : heartbeats) {
             long timeSinceLast = (t-lastTime);
-            System.out.println(timeSinceLast + " - " + longestInterval/excitementThreshold);
-            System.out.println(wasExciting);
             if (timeSinceLast <= longestInterval/excitementThreshold) {
                 consecutiveExciting++;
                 if (consecutiveExciting > highPulseHeartBeatsNeeded) {

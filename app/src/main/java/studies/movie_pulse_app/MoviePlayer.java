@@ -258,6 +258,7 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
             for (SensorDataInstance s : dataValues) {
                 String reading = "(" + s.getTime() + "," + s.getValue() + ")";
                 pw.println(reading);
+                System.out.println(reading);
             }
             pw.close();
             Toast.makeText(this, "Wrote sensor data to file " + fileName, Toast.LENGTH_SHORT).show();
@@ -294,6 +295,7 @@ public class MoviePlayer extends AppCompatActivity implements StartDialogFragmen
         if (analyzer.wasExciting()) {
             ((ImageView) settingsDialog.findViewById(R.id.result_image)).setImageResource(R.drawable.exciting);
         }
+        System.out.println(analyzer.wasExciting());
         settingsDialog.findViewById(R.id.endbutton).setOnClickListener(new Button.OnClickListener() {
             public void onClick(View v) {
                 finish();
